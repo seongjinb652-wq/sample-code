@@ -4,7 +4,7 @@ import datetime as dt
 
 # Langchain/Langgraph
 from langgraph.graph import StateGraph, END
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 import networkx as nx
 import matplotlib.pyplot as plt
 # OpenAI API
