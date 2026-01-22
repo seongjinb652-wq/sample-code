@@ -1,4 +1,3 @@
-
 from typing import TypedDict, List, Optional
 import datetime as dt
 
@@ -16,7 +15,7 @@ from langchain_openai import ChatOpenAI
 # 도구들
 import pandas as pd
 import yfinance as yf # yahoo finance 웹 데이터 추출 비공식 도구
-from ddgs import DDGS  # DuckDuckgo 검색도구
+from duckduckgo_search import DDGS  # DuckDuckgo 검색도구
 
 # 회사 이름으로 yfinance 티커 추출
 DART_API_KEY = os.getenv('DART_API_KEY')
