@@ -3,9 +3,14 @@
 # Author: 성진
 # Date: 2026-01-23
 # Description:
-#   NVIDIA 샘플 코드를 기반으로 작성된 클라이언트 채팅 요청 예제.
-#   REST API 호출을 통해 LLM 서버와 대화형 응답을 주고받는 기본 구조를 포함.
+#   단일 대화 요청을 보내고 비스트리밍 응답을 받는 기본 예제.
+#   헤더/페이로드 구성과 POST 호출 흐름을 명확히 제시.
+#
+# Usage:
+#   - 단독 실행 가능
+#   - 조합 가능 (nvidea_core_llm_model_list.py 와 조합 권장)
 # ============================================================
+
 
 from getpass import getpass
 import os
