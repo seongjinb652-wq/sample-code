@@ -1,11 +1,16 @@
 # ============================================================
-# File: nvidea_core_llm_chat_request.py
+# File: nvidea_core_llm_chat_completions.py
 # Author: 성진
 # Date: 2026-01-23
 # Description:
-#   NVIDIA 샘플 코드를 기반으로 작성된 클라이언트 채팅 요청 예제.
-#   REST API 호출을 통해 LLM 서버와 대화형 응답을 주고받는 기본 구조를 포함.
+#   chat/completions 엔드포인트로 대화 요청을 보내고 응답을 수신하는 예제.
+#   모델/메시지/샘플링 파라미터를 포함한 페이로드 구조를 제공.
+#
+# Usage:
+#   - 단독 실행 가능
+#   - 조합 가능 (nvidea_core_llm_model_list.py, nvidea_core_llm_chat_stream.py 와 조합 권장)
 # ============================================================
+
 
 from getpass import getpass
 import os
