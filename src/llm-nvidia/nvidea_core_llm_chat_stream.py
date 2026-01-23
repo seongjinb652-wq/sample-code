@@ -3,14 +3,14 @@
 # Author: 성진
 # Date: 2026-01-23
 # Description:
-#   NVIDIA 샘플 코드를 기반으로 작성된 클라이언트 채팅 스트리밍 예제.
-#   REST API 호출을 통해 LLM 서버와 대화하며,
-#   응답을 JSON 파싱 후 토큰 단위로 실시간 출력하는 구조를 포함.
+#   스트리밍 응답을 처리하여 토큰 단위로 실시간 출력하는 예제.
+#   requests.post(stream=True)와 iter_lines(), JSON 파싱 유틸 포함.
 #
 # Usage:
 #   - 단독 실행 가능
 #   - 조합 가능 (nvidea_core_llm_model_list.py, nvidea_core_llm_chat_request.py 와 조합 권장)
 # ============================================================
+
 
 import requests
 import json
