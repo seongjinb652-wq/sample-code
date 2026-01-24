@@ -12,6 +12,11 @@
 #   - 단독 실행 가능 (항공편 정보 조회 테스트)
 #   - 다른 모듈과 결합하여 SkyFlow 챗봇 시스템에 활용 가능
 # ============================================================
+## ⚠️ 추가: 누락된 임포트 (내가 보완)
+from langchain.schema.runnable import RunnableLambda
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.output_parsers import StrOutputParser
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
 #######################################################################################
 ## Cell 1: 항공편 정보 조회 함수 정의
@@ -67,7 +72,7 @@ external_prompt = ChatPromptTemplate.from_template(
     "\n\n사용자: {input}"
 )
 
-basic_chain = external_prompt | instruct_llm
+basic_chain = external_prompt | instruct_llm ## ⚠️ 여기서 instruct_llm 정의가 누락됬었었음.
 
 basic_chain.invoke({
     'input': '공항에 언제 도착해야 하나요?',
@@ -89,6 +94,7 @@ class KnowledgeBase(BaseModel):
 
 #######################################################################################
 ## Cell 5: KnowledgeBase → get_flight_info 키 변환 함수
+
 def get_key_fn(base: BaseModel) -> dict:
     '''KnowledgeBase 객체를 받아 get_flight_info 조회용 키 딕셔너리 반환'''
     return {
@@ -103,3 +109,9 @@ know_base = KnowledgeBase(first_name="이순신", last_name="장군", confirmati
 
 get_key = RunnableLambda(get_key_fn)
 (get_key | get_flight_info).invoke(know_base)
+
+
+## ⚠️ 추가: instruct_llm 정의 (내가 보완)
+instruct_llm = ChatNVIDIA(model="mistralai/mixtral-8x22b-instruct-v0.1") | StrOutputParser()
+
+
