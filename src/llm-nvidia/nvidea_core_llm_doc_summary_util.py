@@ -9,54 +9,12 @@
 # Usage:★★ - 단독 실행 가능
 # ==================================================
 
-# ---- 문서 로더 임포트 ----
-%%time
-from langchain.document_loaders import UnstructuredFileLoader
-from langchain.document_loaders import ArxivLoader
-
-# ---- 문서 불러오기 ----
-## UnstructuredFileLoader: 범용 로더 (적당히 충분)
-# documents = UnstructuredFileLoader("llama2_paper.pdf").load()
-
-## ArxivLoader: 특정 논문 로더 (더 나은 결과 가능)
-documents = ArxivLoader(query="2404.16130").load()  # GraphRAG
-# documents = ArxivLoader(query="2404.03622").load()  # Visualization-of-Thought
-# documents = ArxivLoader(query="2404.19756").load()  # KAN: Kolmogorov-Arnold Networks
-# documents = ArxivLoader(query="2404.07143").load()  # Infini-Attention
-# documents = ArxivLoader(query="2210.03629").load()  # ReAct
-
-# ---- 문서 샘플 출력 ----
-print("Number of Documents Retrieved:", len(documents))
-print(f"Sample of Document 1 Content (Total Length: {len(documents[0].page_content)}):")
-print(documents[0].page_content[:1000])
-pprint(documents[0].metadata)
-
-# ---- 텍스트 분할기 설정 ----
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1200,
-    chunk_overlap=100,
-    separators=["\n\n", "\n", ".", ";", ",", " ", ""],
-)
-
-docs_split = text_splitter.split_documents(documents)
-
-print(len(docs_split))
-for i in (0, 1, 2, 15, -1):
-    pprint(f"[Document {i}]")
-    print(docs_split[i].page_content)
-    pprint("="*64)
-
-# ---- LangChain 유틸 임포트 ----
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.passthrough import RunnableAssign
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.output_parsers import PydanticOutputParser
-
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
-
 from pydantic import BaseModel, Field
 from typing import List
 from IPython.display import clear_output
@@ -67,14 +25,17 @@ class DocumentSummaryBase(BaseModel):
     main_ideas: List[str] = Field([], description="문서의 핵심 정보 (최대 3개)")
     loose_ends: List[str] = Field([], description="아직 알려지지 않은 열린 질문 (최대 3개)")
 
-# ---- 요약 프롬프트 정의 ----
+# ---- 요약 프롬프트 (한글 버전) ----
 summary_prompt = ChatPromptTemplate.from_template(
-    "You are generating a running summary of the document. Make it readable by a technical user."
-    " After this, the old knowledge base will be replaced by the new one. Make sure a reader can still understand everything."
-    " Keep it short, but as dense and useful as possible! The information should flow from chunk to (loose ends or main ideas) to running_summary."
-    " The updated knowledge base keep all of the information from running_summary here: {info_base}."
-    "\n\n{format_instructions}. Follow the format precisely, including quotations and commas"
-    "\n\nWithout losing any of the info, update the knowledge base with the following: {input}"
+    "당신은 문서의 진행 요약을 생성하는 역할을 맡고 있습니다. "
+    "기술 사용자가 읽을 수 있도록 작성하세요. "
+    "이후 기존 지식 베이스는 새로운 것으로 교체됩니다. "
+    "독자가 모든 내용을 이해할 수 있도록 하세요. "
+    "짧지만 밀도 있고 유용하게 작성해야 합니다. "
+    "정보는 문서 조각에서 (열린 질문 또는 핵심 아이디어)로, 그리고 running_summary로 흐르도록 하세요. "
+    "업데이트된 지식 베이스는 여기의 running_summary 정보를 모두 유지해야 합니다: {info_base}. "
+    "\n\n{format_instructions}. 반드시 형식을 정확히 따르세요. 따옴표와 쉼표 포함. "
+    "\n\n정보를 잃지 않고 다음 내용을 반영하여 지식 베이스를 업데이트하세요: {input}"
 )
 
 # ---- 추출 모듈 정의 ----
@@ -103,16 +64,39 @@ def RExtract(pydantic_class, llm, prompt):
 
 latest_summary = ""
 
-# ---- 요약 체인 정의 ----
+# ---- 요약 체인 정의 (TODO 채움) ----
 def RSummarizer(knowledge, llm, prompt, verbose=False):
     '''
     문서 요약 체인 생성
     '''
     def summarize_docs(docs):        
-        parse_chain = RunnableAssign({'info_base' : (lambda x: None)})
-        state = {}
-
+        # RExtract를 활용하여 파싱 체인 구성
+        parse_chain = RExtract(knowledge.__class__, llm, prompt)
+        
+        # 초기 상태 설정
+        state = {"info_base": knowledge.json()}
+        
         global latest_summary
         
         for i, doc in enumerate(docs):
-            ## TODO: parse_chain
+            # 문서 조각을 체인에 전달하여 상태 업데이트
+            state = parse_chain.invoke({"info_base": state["info_base"], "input": doc.page_content})
+            
+            if verbose:
+                print(f"Considered {i+1} documents")
+                pprint(state["running_summary"])
+                latest_summary = state["running_summary"]
+                clear_output(wait=True)
+
+        return state["running_summary"]
+        
+    return RunnableLambda(summarize_docs)
+
+# ---- NVIDIA LLM 모델 초기화 ----
+instruct_model = ChatNVIDIA(model="mistralai/mixtral-8x22b-instruct-v0.1").bind(max_tokens=4096)
+instruct_llm = instruct_model | StrOutputParser()
+
+# ---- 문서 요약 실행 ----
+summarizer = RSummarizer(DocumentSummaryBase(), instruct_llm, summary_prompt, verbose=True)
+summary = summarizer.invoke(docs_split[:15])
+pprint(latest_summary)
