@@ -52,12 +52,8 @@ def RExtract(pydantic_class, llm, prompt):
         string = (string
             .replace("\\_", "_")
             .replace("\n", " ")
-            .replace("\]
-
-", "]")
-            .replace("
-
-\[", "[")
+            .replace("\]", "]")
+            .replace("\[", "[")
         )
         return string
     return instruct_merge | prompt | llm | preparse | parser
