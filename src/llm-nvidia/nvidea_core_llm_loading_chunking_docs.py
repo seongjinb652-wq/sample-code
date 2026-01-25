@@ -67,7 +67,7 @@ docs += ArxivRetriever().batch([
     "2205.00445",   ## Prioritizing Informative Features (KAIST 박사학위 논문)
 ])
 docs += ArxivLoader(query="Hanprome Hangeul", load_max_docs=1).load()
-
+## 예시 https://arxiv.org/abs/2506.21595
 # References 이후 내용 제거
 for doc in docs:
     content = json.dumps(doc.page_content)
