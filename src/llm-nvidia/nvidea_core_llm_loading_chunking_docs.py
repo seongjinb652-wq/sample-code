@@ -47,12 +47,25 @@ docs += ArxivLoader(query="Large Language Models", load_max_docs=2).load()
 ## 박동민 (KAIST)	딥러닝/데이터사이언스	2024-12-11
 # Hanprome: Modified Hangeul for Expression of Foreign Language Pronunciation	
 ## 김원찬 외	한글 음성/언어학	2024-12-20
-
 docs += ArxivRetriever().batch([
     "2506.21595",   ## Thunder-LLM (한국어 LLM 적응)
     "2205.00445",   ## Prioritizing Informative Features (KAIST 박사학위 논문)
 ])
+docs += ArxivLoader(query="Hanprome Hangeul", load_max_docs=1).load()
 
+# Open Ko-LLM Leaderboard: Evaluating Large Language Models in Korean with Ko-H5 Benchmark	
+## 2405.20574	2024-05-31	Ko-H5 벤치마크를 활용한 한국어 LLM 평가 프레임워크 구축
+# Open Ko-LLM Leaderboard2: Bridging Foundational and Practical Evaluation for Korean LLMs	
+## 2410.12445	2025-03-04	기존 리더보드를 개선하여 실제 활용에 가까운 한국어 LLM 평가
+# ₩on: Establishing Best Practices for Korean Financial NLP	
+## 2503.17963	2025-03-23	금융 분야 한국어 LLM 평가 및 오픈 데이터셋 구축
+# HRET: A Self-Evolving LLM Evaluation Toolkit for Korean	
+## 2503.xxxx (정식 ID: 2503.???)	
+##  with Korean Educational Standards (KoNET Benchmark)	2502.15422	2025-02-21	한국 교육 시험을 활용한 멀티모달 생성형 AI 성능 평가
+docs += ArxivRetriever().batch([
+    "2506.21595",   ## Thunder-LLM (한국어 LLM 적응)
+    "2205.00445",   ## Prioritizing Informative Features (KAIST 박사학위 논문)
+])
 docs += ArxivLoader(query="Hanprome Hangeul", load_max_docs=1).load()
 
 # References 이후 내용 제거
