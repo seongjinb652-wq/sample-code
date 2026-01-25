@@ -30,3 +30,8 @@ convstore = FAISS.from_texts(conversation, embedding=embedder)
 
 ## Retriever 객체 생성 (검색용)
 retriever = convstore.as_retriever()
+
+# 대화형 질의 (한국어 버전)
+pprint(retriever.invoke("당신의 이름은 무엇인가요?"))
+pprint(retriever.invoke("록키산맥은 어디에 있나요?"))
+
