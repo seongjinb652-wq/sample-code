@@ -1,5 +1,3 @@
-# !python fashion_mnist.py --epochs 2 --batch-size 512
-# Horovod    https://github.com/horovod/horovod   나 DeepSpeed   https://github.com/deepspeedai/DeepSpeed
 import argparse
 import torch
 import torch.nn as nn
@@ -238,22 +236,18 @@ def worker(local_rank, world_size, args):
     for epoch in range(args.epochs):
         t0 = time.time()
         train_sampler.set_epoch(epoch)
-        
         # 1. 학습 진행
         train(model, optimizer, train_loader, loss_fn, device)
-        
         # [Step 8 시작]
         # 2. 모든 GPU가 학습 끝날 때까지 대기
         dist.barrier()
         epoch_time = time.time() - t0
         total_time += epoch_time
-
         # 3. 초당 이미지 처리량 계산 (텐서로 변환 필수!)
-        images_per_sec = torch.tensor(len(train_loader) * args.batch_size / epoch_time).to(device)
-        
+        images_per_sec = torch.tensor(len(train_loader) * args.batch_size / epoch_time).to(device)        
         # 4. 0번 GPU(Master)에게 모든 GPU의 처리량을 더해서 보냄
+        # dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
         dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
-        # [Step 8 끝]  
         # [Step 9 시작]
         # 1. 각 GPU에서 독립적으로 테스트 수행
         v_accuracy, v_loss = test(model, test_loader, loss_fn, device)
@@ -267,13 +261,11 @@ def worker(local_rank, world_size, args):
         
         avg_acc = metrics[0].item()
         avg_loss = metrics[1].item()
-
         # 4. 출력은 대장(Rank 0)만 합니다. (안 그러면 GPU 개수만큼 똑같은 줄이 찍혀요!)
         if global_rank == 0:
             print(f"Epoch = {epoch+1:2d}: Cumulative Time = {total_time:5.3f}, "
                   f"Epoch Time = {epoch_time:5.3f}, Images/sec = {images_per_sec.item():.2f}, "
                   f"Validation Loss = {avg_loss:5.3f}, Validation Accuracy = {avg_acc:5.3f}")
-
             # 목표치 달성 시 조기 종료 체크
             if avg_acc >= args.target_accuracy:
                  print(f"🎯 목표 정확도 {args.target_accuracy} 달성!")
@@ -382,7 +374,7 @@ if __name__ == '__main__':
         # using torch.distributed.all_reduce. To perform an average operation, 
         # provide 'dist.ReduceOp.AVG' as the input for the op parameter in 
         # torch.distributed.all_reduce.  
-        dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
+        # dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
         # val_accuracy.append(v_accuracy)
         
         # print("Epoch = {:2d}: Cumulative Time = {:5.3f}, Epoch Time = {:5.3f}, Images/sec = {}, Validation Loss = {:5.3f}, Validation Accuracy = {:5.3f}".format(epoch+1, total_time, epoch_time, images_per_sec, v_loss, val_accuracy[-1]))
