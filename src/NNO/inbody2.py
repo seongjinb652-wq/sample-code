@@ -116,3 +116,29 @@ avg_b = sum(b_array[(i-1)*n_samples:(i  )*n_samples]) / n_samples
 avg_loss = sum(loss_array[(i-1)*n_samples:(i  )*n_samples]) / n_samples
 
 print("After training: w = {:4.3f}, b = {:4.3f}, loss = {:7.3f}".format(avg_w, avg_b, avg_loss))
+
+from mpl_toolkits.mplot3d import Axes3D
+plt.close()
+
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+ax.plot(w_array, b_array, loss_array)
+
+ax.set_xlabel('w', size=16)
+ax.set_ylabel('b', size=16)
+ax.tick_params(labelsize=12)
+
+plt.show()
+
+plt.close()
+
+fig = plt.figure()
+ax2 = fig.add_subplot(projection='3d')
+
+ax2.scatter(w_surface, b_surface, loss_surface, c = loss_surface, alpha = 0.02)
+ax2.plot(w_array, b_array, loss_array, color='black')
+
+ax2.set_xlabel('w')
+ax2.set_ylabel('b')
+
+plt.show()
