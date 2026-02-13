@@ -31,14 +31,15 @@ parser.add_argument('--node-id', type=int, default=0,
 parser.add_argument('--num-gpus', type=int, default=1,
                     help='Number of GPUs in each node')
 ## TODO momentum: add argument to accept the momentum parameter
-
+parser.add_argument('--momentum',type=float, default=0.9, 
+                    help='SGD momentum')
 ## TODO warmup: add argument to accept the warmup epochs parameter
 
 args = parser.parse_args()
 
 WORLD_SIZE = args.num_gpus * args.num_nodes
 os.environ['MASTER_ADDR'] = 'localhost' 
-os.environ['MASTER_PORT'] = '9956' 
+os.environ['MASTER_PORT'] = '9958' 
 
 # Standard convolution block followed by batch normalization 
 class cbrblock(nn.Module):
@@ -167,15 +168,15 @@ def test(model, test_loader, loss_fn, device):
 ## 'on_epoch_end' function from functions/save_training_data.py. The 
 ## csv library has already been imported for you.
 def on_train_begin(filepath):
-    with open(filepath, 'w' , new_line=' ') as f:
+    with open(filepath, 'w' , newline='') as f:
         writer = csv.writer(f)
-        writer.writeow(["total_time","val_accuracy"])
-        writer.writeow([0.0,0.0])
+        writer.writerow(["total_time(sec)","val_accuracy(%)"])
+        writer.writerow([0.0,0.0])
         
 def on_epoch_end(filepath, total_time, val_accuracy):    
-    with open(filepath, 'a' , new_line=' ') as f:
+    with open(filepath, 'a' , newline='') as f:
         writer = csv.writer(f)
-        writer.writeow([total_time,val_accuracy])
+        writer.writerow([round(total_time,1), round(val_accuracy, 4)*100])
 
 def worker(local_rank, args):
     global_rank = args.node_id * args.num_gpus + local_rank 
@@ -232,7 +233,7 @@ def worker(local_rank, args):
     ## TODO NovoGrad: replace the SGD optimizer with the NovoGrad optimizer\
     ## TODO momentum: specify the momentum parameter in the SGD optimizer 
     # Define the SGD optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.base_lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.base_lr, momentum=args.momentum )
     ## TODO warmup: define the scheduler using the torch.optim.lr_scheduler.LinearLR function
 
     val_accuracy = []
@@ -240,8 +241,10 @@ def worker(local_rank, args):
     ## TODO warmup: update the format of the csv file name. 
     ## TODO momentum: update the format of the csv file name. 
     ## TODO save data: define the file path for saving the csv file as 
-    data_filepath = "training_data/{}ranks-{}bs-{}lr.csv".format(WORLD_SIZE, args.batch_size, args.base_lr)
-    on_train_begin(filepath)
+    
+    if global_rank == 0: 
+        data_filepath = "training_data/{}ranks-{}bs-{}lr-{}m.csv".format(WORLD_SIZE, args.batch_size, args.base_lr, args.momentum)
+        on_train_begin(data_filepath)
     ## Then, for only the main global rank 0 process, invoke the on_train_begin function 
     ## to create and initialize the the csv file.
 
@@ -273,6 +276,8 @@ def worker(local_rank, args):
         
         if global_rank == 0:
             print("Epoch = {:2d}: Cumulative Time = {:5.3f}, Epoch Time = {:5.3f}, Images/sec = {}, Validation Loss = {:5.3f}, Validation Accuracy = {:5.3f}".format(epoch+1, total_time, epoch_time, images_per_sec, v_loss, val_accuracy[-1]))
+            
+            on_epoch_end(data_filepath, total_time, val_accuracy[-1].item())    
             ## TODO save data: for only the global rank 0 process, update the 
             ## csv file with total training time and the epoch validation accuracy
             ## using the on_epoch_end function. Note that you will have to 
