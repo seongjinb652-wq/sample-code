@@ -166,6 +166,16 @@ def test(model, test_loader, loss_fn, device):
 ## TODO save data: copy the 'on_train_begin' function as well as the 
 ## 'on_epoch_end' function from functions/save_training_data.py. The 
 ## csv library has already been imported for you.
+def on_train_begin(filepath):
+    with open(filepath, 'w' , new_line=' ') as f:
+        writer = csv.writer(f)
+        writer.writeow(["total_time","val_accuracy"])
+        writer.writeow([0.0,0.0])
+        
+def on_epoch_end(filepath, total_time, val_accuracy):    
+    with open(filepath, 'a' , new_line=' ') as f:
+        writer = csv.writer(f)
+        writer.writeow([total_time,val_accuracy])
 
 def worker(local_rank, args):
     global_rank = args.node_id * args.num_gpus + local_rank 
@@ -230,7 +240,8 @@ def worker(local_rank, args):
     ## TODO warmup: update the format of the csv file name. 
     ## TODO momentum: update the format of the csv file name. 
     ## TODO save data: define the file path for saving the csv file as 
-    ## data_filepath = "training_data/{}ranks-{}bs-{}lr.csv".format(WORLD_SIZE, args.batch_size, args.base_lr)
+    data_filepath = "training_data/{}ranks-{}bs-{}lr.csv".format(WORLD_SIZE, args.batch_size, args.base_lr)
+    on_train_begin(filepath)
     ## Then, for only the main global rank 0 process, invoke the on_train_begin function 
     ## to create and initialize the the csv file.
 
