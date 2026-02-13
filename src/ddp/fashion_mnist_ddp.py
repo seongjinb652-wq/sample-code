@@ -7,9 +7,9 @@ import time
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
-
-
-import torch.distributed as dist # TODO Step 0: Include DDP import statement for convenience
+import torch.distributed as dist
+import csv
+## TODO NovoGrad: import the torch_optimizer library
 
 # Parse input arguments
 parser = argparse.ArgumentParser(description='Fashion MNIST Example',
@@ -24,28 +24,21 @@ parser.add_argument('--target-accuracy', type=float, default=.85,
                     help='Target accuracy to stop training')
 parser.add_argument('--patience', type=int, default=2,
                     help='Number of epochs that meet target before stopping')
-
-# TODO Step 1: Add the following to the argument parser:
-# number of nodes (num_nodes, type = int, default = 1), 
-# ID for the current node (node_id, type = int, default = 0)
-# number of GPUs in each node (num_gpus, type = int, default = 1)
 parser.add_argument('--num-nodes', type=int, default=1,
-                    help='Number of nodes')
+                    help='Number of available nodes/hosts')
 parser.add_argument('--node-id', type=int, default=0,
-                    help='Number of ID for the current node')
+                    help='Unique ID to identify the current node/host')
 parser.add_argument('--num-gpus', type=int, default=1,
                     help='Number of GPUs in each node')
+## TODO momentum: add argument to accept the momentum parameter
 
+## TODO warmup: add argument to accept the warmup epochs parameter
 
 args = parser.parse_args()
 
-# TODO Step 2: Compute world size (WORLD_SIZE) using num_gpus and num_nodes
-# and specify the IP address/port number for the node associated with 
-# the main process (global rank = 0):
-world_size = args.num_gpus * args.num_nodes
+WORLD_SIZE = args.num_gpus * args.num_nodes
 os.environ['MASTER_ADDR'] = 'localhost' 
 os.environ['MASTER_PORT'] = '9956' 
-os.environ['WORLD_SIZE'] = str(world_size)
 
 # Standard convolution block followed by batch normalization 
 class cbrblock(nn.Module):
@@ -170,230 +163,114 @@ def test(model, test_loader, loss_fn, device):
     
     return v_accuracy, v_loss
 
-# TODO Step 3: Move all code (including comments) under __name__ == '__main__' to 
-# a new 'worker' function that accepts two inputs with no return value: 
-# (1) the local rank (local_rank) of the process
-# (2) the parsed input arguments (args)
-# The following is the signature for the worker function: worker(local_rank, args)
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
+## TODO save data: copy the 'on_train_begin' function as well as the 
+## 'on_epoch_end' function from functions/save_training_data.py. The 
+## csv library has already been imported for you.
 
-def worker(local_rank, world_size, args):
-    # 1. [Step 4] 프로세스 그룹 초기화 (신고식)
-    # 각 일꾼이 반장(Master)에게 출석 체크를 합니다.
-    global_rank = args.node_id * args.num_gpus + local_rank
-    dist.init_process_group(
-        backend='nccl',            # NVIDIA GPU 통신용 최강 백엔드
-        init_method='env://', 
-        world_size=world_size, 
-        rank=global_rank
+def worker(local_rank, args):
+    global_rank = args.node_id * args.num_gpus + local_rank 
+    dist.init_process_group( 
+    backend='nccl',  
+    world_size=WORLD_SIZE, 
+    rank=global_rank 
+    ) 
+
+    download = True if local_rank == 0 else False
+    if local_rank == 0:
+        train_set = torchvision.datasets.FashionMNIST("./data", download=download, transform=
+                                                    transforms.Compose([transforms.ToTensor()]))
+        test_set = torchvision.datasets.FashionMNIST("./data", download=download, train=False, transform=
+                                                   transforms.Compose([transforms.ToTensor()]))  
+    dist.barrier()
+    
+    if local_rank != 0:
+        train_set = torchvision.datasets.FashionMNIST("./data", download=download, transform=
+                                                    transforms.Compose([transforms.ToTensor()]))
+        test_set = torchvision.datasets.FashionMNIST("./data", download=download, train=False, transform=
+                                                   transforms.Compose([transforms.ToTensor()]))  
+
+    train_sampler = torch.utils.data.distributed.DistributedSampler(
+    train_set,
+    num_replicas=WORLD_SIZE,
+    rank=global_rank
     )
     
-    # global_rank = args.node_id * args.num_gpus + local_rank
-    # dist.init_process_group(
-    #     backend='nccl', 
-    #     init_method='env://', 
-    #     world_size=world_size, 
-    #     rank=global_rank)
-    # [Step 5] 대장만 다운로드 로직 (코딩 하세요!)
-    download_flag = (local_rank == 0)
-    # train_set = torchvision.datasets.FashionMNIST("./data", download=download_flag, transform=transforms.ToTensor())
-    train_set = torchvision.datasets.FashionMNIST("./data", download=download_flag, transforms.Compose([transforms.ToTensor()]))
-    # transforms.Compose([transforms.ToTensor()]) 여러개 적용을 위한 바꿈. 
-    dist.barrier() # 0번 끝날 때까지 대기
-    # test_set = torchvision.datasets.FashionMNIST("./data", download=False, train=False, transform=transforms.ToTensor())
-    test_set = torchvision.datasets.FashionMNIST("./data", download=False, train=False,transforms.Compose([transforms.ToTensor()]))
-  
-    # Compose를 써야 하는 이유 (음성 처리 예시)
-    # transform = transforms.Compose([
-    #     SoundGain(1.2),           # 1. 소리 증폭
-    #     AddWhiteNoise(0.01),      # 2. 백색소음 추가 (강건한 모델을 위해)
-    #     transforms.ToTensor()     # 3. 텐서 변환
-    # ])
+    test_sampler = torch.utils.data.distributed.DistributedSampler(
+    test_set,
+    num_replicas=WORLD_SIZE,
+    rank=global_rank
+    )
 
-    # [Step 6] 데이터 쪼개기 (Sampler 코딩 하세요!)
-    train_sampler = DistributedSampler(train_set, num_replicas=world_size, rank=global_rank)
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, sampler=train_sampler, drop_last=True)
-    test_loader = DataLoader(test_set, batch_size=args.batch_size, drop_last=True) # 테스트는 그대로
-    
-    
-    # 2. [Step 7] 현재 프로세스가 사용할 GPU 장치 설정
-    # local_rank에 맞는 GPU를 내 장치로 찜합니다.
-    torch.cuda.set_device(local_rank)
-    device = torch.device(f'cuda:{local_rank}')
-    
-    # 3. 모델 초기화 및 DDP 래핑
-    # 모델을 메모리에 올리고, 다른 GPU의 모델들과 동기화되도록 포장(DDP)합니다.
-    model = WideResNet(num_classes=10).to(device)
-    model = DDP(model, device_ids=[local_rank])
-    
-    # 4. 손실 함수와 최적화 도구 설정
+    # Training data loader
+    train_loader = torch.utils.data.DataLoader(train_set, 
+                                               batch_size=args.batch_size, drop_last=True, sampler=train_sampler)
+    # Validation data loader
+    test_loader = torch.utils.data.DataLoader(test_set,
+                                              batch_size=args.batch_size, drop_last=True, sampler=test_sampler)
+
+    # Create the model and move to GPU device if available
+    num_classes = 10
+
+    device = torch.device("cuda:" + str(local_rank) if torch.cuda.is_available() else "cpu")
+
+    model = WideResNet(num_classes).to(device)
+    model = nn.parallel.DistributedDataParallel(model, device_ids=[local_rank])
+
+    # Define loss function
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.base_lr)
     
-    # 5. [Step 6] 데이터 분산 로더 설정
-    # (이 부분은 Step 6에서 데이터셋 정의 후 완성하겠지만, 구조는 이렇습니다)
-    # train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=global_rank)
-    # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler)
-    
-    print(f"🚀 일꾼 [Rank {global_rank}]이 GPU {local_rank}에서 작업을 시작합니다!")
+    ## TODO NovoGrad: replace the SGD optimizer with the NovoGrad optimizer\
+    ## TODO momentum: specify the momentum parameter in the SGD optimizer 
+    # Define the SGD optimizer
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.base_lr)
+    ## TODO warmup: define the scheduler using the torch.optim.lr_scheduler.LinearLR function
 
-    # 이후 에포크 루프 실행...
-    # for epoch in range(args.epochs):
-    #     train(model, optimizer, train_loader, loss_fn, device)
+    val_accuracy = []
+    
+    ## TODO warmup: update the format of the csv file name. 
+    ## TODO momentum: update the format of the csv file name. 
+    ## TODO save data: define the file path for saving the csv file as 
+    ## data_filepath = "training_data/{}ranks-{}bs-{}lr.csv".format(WORLD_SIZE, args.batch_size, args.base_lr)
+    ## Then, for only the main global rank 0 process, invoke the on_train_begin function 
+    ## to create and initialize the the csv file.
+
     total_time = 0
+
     for epoch in range(args.epochs):
+        
         t0 = time.time()
+        
         train_sampler.set_epoch(epoch)
-        # 1. 학습 진행
+        
         train(model, optimizer, train_loader, loss_fn, device)
-        # [Step 8 시작]
-        # 2. 모든 GPU가 학습 끝날 때까지 대기
+        
+        ## TODO warmup: advance the scheduler to computer the next
+        ## learning rate
+        
         dist.barrier()
         epoch_time = time.time() - t0
         total_time += epoch_time
-        # 3. 초당 이미지 처리량 계산 (텐서로 변환 필수!)
-        images_per_sec = torch.tensor(len(train_loader) * args.batch_size / epoch_time).to(device)        
-        # 4. 0번 GPU(Master)에게 모든 GPU의 처리량을 더해서 보냄
-        # dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
-        dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
-        # [Step 9 시작]
-        # 1. 각 GPU에서 독립적으로 테스트 수행
+
+        images_per_sec = torch.tensor(len(train_loader)*args.batch_size/epoch_time).to(device)
+        torch.distributed.reduce(images_per_sec, 0)
+        
         v_accuracy, v_loss = test(model, test_loader, loss_fn, device)
+
+        torch.distributed.all_reduce(v_accuracy, op=dist.ReduceOp.AVG)
+        torch.distributed.all_reduce(v_loss, op=dist.ReduceOp.AVG)
+        val_accuracy.append(v_accuracy)
         
-        # 2. 결과값을 텐서로 묶어서 GPU에 올립니다 (평균 계산용)
-        metrics = torch.tensor([v_accuracy, v_loss]).to(device)
-        
-        # 3. 중요!! 모든 GPU의 성적을 모아서 평균(AVG)을 냅니다.
-        # all_reduce는 reduce와 달리 모든 GPU가 똑같은 '평균값'을 가지게 됩니다.
-        dist.all_reduce(metrics, op=dist.ReduceOp.AVG)
-        
-        avg_acc = metrics[0].item()
-        avg_loss = metrics[1].item()
-        # 4. 출력은 대장(Rank 0)만 합니다. (안 그러면 GPU 개수만큼 똑같은 줄이 찍혀요!)
         if global_rank == 0:
-            print(f"Epoch = {epoch+1:2d}: Cumulative Time = {total_time:5.3f}, "
-                  f"Epoch Time = {epoch_time:5.3f}, Images/sec = {images_per_sec.item():.2f}, "
-                  f"Validation Loss = {avg_loss:5.3f}, Validation Accuracy = {avg_acc:5.3f}")
-            # 목표치 달성 시 조기 종료 체크
-            if avg_acc >= args.target_accuracy:
-                 print(f"🎯 목표 정확도 {args.target_accuracy} 달성!")
-        # [Step 9 끝]
-        
+            print("Epoch = {:2d}: Cumulative Time = {:5.3f}, Epoch Time = {:5.3f}, Images/sec = {}, Validation Loss = {:5.3f}, Validation Accuracy = {:5.3f}".format(epoch+1, total_time, epoch_time, images_per_sec, v_loss, val_accuracy[-1]))
+            ## TODO save data: for only the global rank 0 process, update the 
+            ## csv file with total training time and the epoch validation accuracy
+            ## using the on_epoch_end function. Note that you will have to 
+            ## convert the validation accuracy to a standard python number
+            ## using torch.Tensor.item. 
+
+        if len(val_accuracy) >= args.patience and all(acc >= args.target_accuracy for acc in val_accuracy[-args.patience:]):
+            print('Early stopping after epoch {}'.format(epoch + 1))
+            break
+
 if __name__ == '__main__':
-    world_size = args.num_gpus * args.num_nodes
-    os.environ['MASTER_ADDR'] = 'localhost' 
-    os.environ['MASTER_PORT'] = '9956' 
-    os.environ['WORLD_SIZE'] = str(world_size)
-    # [Step 10] 여기가 시작점입니다! (코딩 하세요!)
-    import torch.multiprocessing as mp
-    # 일꾼들을 GPU 개수만큼 생성해서 worker 함수로 보냅니다.
-    mp.spawn(worker, args=(world_size, args), nprocs=args.num_gpus)
-    
-    # TODO Step 4: Compute the global rank (global_rank) of the spawned process as:
-    # =node_id*num_gpus + local_rank.
-    # To properly initialize and synchornize each process, 
-    # invoke dist.init_process_group with the approrpriate parameters:
-    # backend='nccl', world_size=WORLD_SIZE, rank=global_rank
-    
-    # TODO Step 5: initialize a download flag (download) that is true 
-    # only if local_rank == 0. This download flag can be used as an 
-    # input argument in torchvision.datasets.FashionMNIST.
-    # Download the training and validation sets for only local_rank == 0. 
-    # Call dist.barrier() to have all processes in a given node wait 
-    # till data download is complete. Following this, for all other 
-    # processes, torchvision.datasets.FashionMNIST can be called with
-    # the download flag as false.
-    
-    # train_set = torchvision.datasets.FashionMNIST("./data", download=True, transform=
-    #                                            transforms.Compose([transforms.ToTensor()]))
-    # test_set = torchvision.datasets.FashionMNIST("./data", download=True, train=False, transform=
-    #                                           transforms.Compose([transforms.ToTensor()]))  
-
-    # TODO Step 6: generate two samplers (one for the training 
-    # dataset (train_sampler) and the other for the testing 
-    # dataset (test_sampler) with  torch.utils.data.distributed.DistributedSampler. 
-    # Inputs to this function include:
-    # (1) the datasets (either train_loader_subset or test_loader_subset)
-    # (2) number of replicas (num_replicas), which is the world size (WORLD_SIZE) 
-    # (3) the global rank (global_rank). 
-    # Pass the appropriate sampler as a parameter (e.g., sampler = train_sampler)
-    # to the training and testing DataLoader
-
-    # Training data loader
-    # train_loader = torch.utils.data.DataLoader(train_set, 
-    #                                            batch_size=args.batch_size, drop_last=True)
-    # Validation data loader
-    # test_loader = torch.utils.data.DataLoader(test_set,
-    #                                           batch_size=args.batch_size, drop_last=True)
-
-    # Create the model and move to GPU device if available
-    # num_classes = 10
-
-    # TODO Step 7: Modify the torch.device call from "cuda:0" to "cuda:<enter local rank here>" 
-    # to pin the process to its assigned GPU. 
-    # After the model is moved to the assigned GPU, wrap the model with 
-    # nn.parallel.DistributedDataParallel, which requires the local rank (local_rank)
-    # to be specificed as the 'device_ids' parameter: device_ids=[local_rank]
-    
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    # TODO Optional: before moving the model to the GPU, convert standard 
-    # batchnorm layers to SyncBatchNorm layers using 
-    # torch.nn.SyncBatchNorm.convert_sync_batchnorm. 
-    
-    # model = WideResNet(num_classes).to(device)
-
-    # Define loss function
-    # loss_fn = nn.CrossEntropyLoss()
-
-    # Define the SGD optimizer
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.base_lr)
-
-    # val_accuracy = []
-
-    # total_time = 0
-
-    # for epoch in range(args.epochs):
-        
-        # t0 = time.time()
-        
-        # TODO Step 6.5: update the random seed of the DistributedSampler to change
-        # the shuffle ordering for each epoch. It is necessary to do this for
-        # the train_sampler, but irrelevant for the test_sampler. The random seed
-        # can be altered with the set_epoch method (which accepts the epoch number
-        # as an input) of the DistributedSampler. 
-        
-        # train(model, optimizer, train_loader, loss_fn, device)
-        
-        # TODO Step 8: At the end of every training epoch, synchronize (using dist.barrier())
-        # all processes to compute the slowest epoch time. 
-        # To compute the number of images processed per second, convert images_per_sec
-        # into a tensor on the GPU, and then call torch.distributed.reduce on images_per_sec 
-        # with global rank 0 as the destination process. The reduce operation computes the 
-        # sum of images_per_sec across all GPUs and stores the sum in images_per_sec in the 
-        # master process (global rank 0).
-        # Once this computation is done, enable the metrics print statement for only the master process.
-
-
-        
-        # v_accuracy, v_loss = test(model, test_loader, loss_fn, device)
-        
-        # TODO Step 9: average validation accuracy and loss across all GPUs  
-        # using torch.distributed.all_reduce. To perform an average operation, 
-        # provide 'dist.ReduceOp.AVG' as the input for the op parameter in 
-        # torch.distributed.all_reduce.  
-        # dist.reduce(images_per_sec, dst=0, op=dist.ReduceOp.SUM)
-        # val_accuracy.append(v_accuracy)
-        
-        # print("Epoch = {:2d}: Cumulative Time = {:5.3f}, Epoch Time = {:5.3f}, Images/sec = {}, Validation Loss = {:5.3f}, Validation Accuracy = {:5.3f}".format(epoch+1, total_time, epoch_time, images_per_sec, v_loss, val_accuracy[-1]))
-
-        # if len(val_accuracy) >= args.patience and all(acc >= args.target_accuracy for acc in val_accuracy[-args.patience:]):
-        #     print('Early stopping after epoch {}'.format(epoch + 1))
-        #     break
-            
-    # TODO Step 10: Within __name__ == '__main__', launch each process (total number of 
-    # processes is equivalent to the number of available GPUs per node) with 
-    # torch.multiprocessing.spawn(). Input parameters include the worker function, 
-    # the number of GPUs per node (nprocs), and all the parsed arguments.
+    torch.multiprocessing.spawn(worker, nprocs=args.num_gpus, args=(args,))
