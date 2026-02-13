@@ -284,9 +284,12 @@ def worker(local_rank, args):
             ## convert the validation accuracy to a standard python number
             ## using torch.Tensor.item. 
 
+            
         if len(val_accuracy) >= args.patience and all(acc >= args.target_accuracy for acc in val_accuracy[-args.patience:]):
-            print('Early stopping after epoch {}'.format(epoch + 1))
+            if global_rank == 0: # 이 줄을 추가해서 들여쓰기 하세요
+                print('Early stopping after epoch {}'.format(epoch + 1))
             break
+
 
 if __name__ == '__main__':
     torch.multiprocessing.spawn(worker, nprocs=args.num_gpus, args=(args,))
