@@ -198,9 +198,19 @@ def worker(local_rank, world_size, args):
     #     rank=global_rank)
     # [Step 5] 대장만 다운로드 로직 (코딩 하세요!)
     download_flag = (local_rank == 0)
-    train_set = torchvision.datasets.FashionMNIST("./data", download=download_flag, transform=transforms.ToTensor())
+    # train_set = torchvision.datasets.FashionMNIST("./data", download=download_flag, transform=transforms.ToTensor())
+    train_set = torchvision.datasets.FashionMNIST("./data", download=download_flag, transforms.Compose([transforms.ToTensor()]))
+    # transforms.Compose([transforms.ToTensor()]) 여러개 적용을 위한 바꿈. 
     dist.barrier() # 0번 끝날 때까지 대기
-    test_set = torchvision.datasets.FashionMNIST("./data", download=False, train=False, transform=transforms.ToTensor())
+    # test_set = torchvision.datasets.FashionMNIST("./data", download=False, train=False, transform=transforms.ToTensor())
+    test_set = torchvision.datasets.FashionMNIST("./data", download=False, train=False,transforms.Compose([transforms.ToTensor()]))
+  
+    # Compose를 써야 하는 이유 (음성 처리 예시)
+    # transform = transforms.Compose([
+    #     SoundGain(1.2),           # 1. 소리 증폭
+    #     AddWhiteNoise(0.01),      # 2. 백색소음 추가 (강건한 모델을 위해)
+    #     transforms.ToTensor()     # 3. 텐서 변환
+    # ])
 
     # [Step 6] 데이터 쪼개기 (Sampler 코딩 하세요!)
     train_sampler = DistributedSampler(train_set, num_replicas=world_size, rank=global_rank)
