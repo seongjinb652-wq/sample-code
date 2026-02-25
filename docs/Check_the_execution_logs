@@ -1,0 +1,5 @@
+# Wait 3 seconds the job to execute and get the populated logs 
+! sleep 3
+
+# Check the execution logs 
+! cat $slurm_job_output
