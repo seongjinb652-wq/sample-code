@@ -1,0 +1,9 @@
+# submit the job
+! sbatch /dli/code/test_sbatch.sbatch
+
+# Get the JOBID 
+JOBID=!squeue -u root | grep dli | awk '{print $1}'
+slurm_job_output='/dli/nemo/logs/'+JOBID[0]+'.out'
+
+# check the jobs in the SLURM scheduling queue
+! squeue
